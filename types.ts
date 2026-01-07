@@ -11,6 +11,8 @@ export enum TileType {
   PLAYER = '@'
 }
 
+export type Language = 'EN' | 'CN';
+
 export interface Position {
   x: number;
   y: number;
@@ -40,4 +42,5 @@ export interface GameState {
   hasKey: boolean;
   floor: number;
   logs: LogEntry[];
+  language: Language;
 }
