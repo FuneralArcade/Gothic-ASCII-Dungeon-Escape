@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TileType, Position, Entity, LogEntry, GameState, Language } from './types';
 import { MAP_WIDTH, MAP_HEIGHT, INITIAL_HP, INITIAL_VISION, UPGRADED_VISION, TILE_COLORS, TRANSLATIONS } from './constants';
 import { MapGenerator } from './services/MapGenerator';
+import { AudioManager } from './services/AudioManager';
 import Sidebar from './components/Sidebar';
 
 const App: React.FC = () => {
@@ -91,6 +92,16 @@ const App: React.FC = () => {
     initLevel(1);
   }, [initLevel]);
 
+  // Periodic chilling wind
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (Math.random() > 0.6) { // Slightly more frequent wind
+        AudioManager.playWind();
+      }
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
   const updateVisibility = useCallback(() => {
     if (!gameState) return;
     const { player, visionRadius, explored, visited } = gameState;
@@ -115,7 +126,6 @@ const App: React.FC = () => {
     updateVisibility();
   }, [gameState?.player.pos]);
 
-  // Handle enemy turns
   const processEnemyTurns = (currentState: GameState) => {
     let currentHp = currentState.player.hp!;
     const playerPos = currentState.player.pos;
@@ -126,7 +136,6 @@ const App: React.FC = () => {
 
       const dist = Math.abs(entity.pos.x - playerPos.x) + Math.abs(entity.pos.y - playerPos.y);
       
-      // Enemy only acts if player is within range (e.g., detected)
       if (dist < 8) {
         let nextX = entity.pos.x;
         let nextY = entity.pos.y;
@@ -136,21 +145,18 @@ const App: React.FC = () => {
         else if (entity.pos.y < playerPos.y) nextY++;
         else if (entity.pos.y > playerPos.y) nextY--;
 
-        // Collision with walls/rocks
         if (currentState.map[nextY][nextX] === TileType.WALL || currentState.map[nextY][nextX] === TileType.ROCK) {
           return entity;
         }
 
-        // Check if hitting player
         if (nextX === playerPos.x && nextY === playerPos.y) {
           const dmg = 5 + Math.floor(Math.random() * 8);
           currentHp -= dmg;
           addLog(`${language === 'CN' ? '敌人攻击你：-' : 'Enemy strikes: -'}${dmg} HP.`, 'combat');
           if (currentHp <= 0) isDead = true;
-          return entity; // Enemy stays where they are and attacks
+          return entity;
         }
 
-        // Check collision with other entities
         const otherEntity = currentState.entities.find(e => e.id !== entity.id && e.pos.x === nextX && e.pos.y === nextY);
         if (otherEntity) return entity;
 
@@ -171,10 +177,12 @@ const App: React.FC = () => {
 
   const handleMove = (dx: number, dy: number) => {
     if (!gameState || gameOver) return;
+    
+    AudioManager.resume();
 
-    // Wait logic
     if (dx === 0 && dy === 0) {
       addLog(t.wait, 'info');
+      AudioManager.playFootstep(); // Echo of silence
       processEnemyTurns(gameState);
       return;
     }
@@ -186,6 +194,9 @@ const App: React.FC = () => {
 
     const targetTile = gameState.map[newY][newX];
     if (targetTile === TileType.WALL || targetTile === TileType.ROCK) return;
+
+    // Successful movement: stony footstep with echo
+    AudioManager.playFootstep();
 
     if (targetTile === TileType.DOOR) {
       if (gameState.hasKey) {
@@ -199,11 +210,9 @@ const App: React.FC = () => {
     }
 
     const entityAtTarget = gameState.entities.find(e => e.pos.x === newX && e.pos.y === newY);
-    let actionTaken = false;
     
     if (entityAtTarget) {
       if (entityAtTarget.type === TileType.ENEMY) {
-        actionTaken = true;
         const damage = 10 + Math.floor(Math.random() * 10);
         addLog(`${t.log_hit}${damage} HP.`, 'combat');
         
@@ -229,17 +238,19 @@ const App: React.FC = () => {
 
       if (entityAtTarget.type === TileType.KEY) {
         addLog(t.log_key, 'item');
+        AudioManager.playPickupKey();
         setGameState(prev => prev ? ({ ...prev, hasKey: true, entities: prev.entities.filter(e => e.id !== entityAtTarget.id) }) : null);
       } else if (entityAtTarget.type === TileType.LANTERN) {
         addLog(t.log_light, 'item');
+        AudioManager.playPickupLantern();
         setGameState(prev => prev ? ({ ...prev, visionRadius: UPGRADED_VISION, entities: prev.entities.filter(e => e.id !== entityAtTarget.id) }) : null);
       } else if (entityAtTarget.type === TileType.POTION) {
         addLog(t.log_potion, 'item');
+        AudioManager.playPotion();
         setGameState(prev => prev ? ({ ...prev, player: { ...prev.player, hp: Math.min(prev.player.maxHp!, prev.player.hp! + 25) }, entities: prev.entities.filter(e => e.id !== entityAtTarget.id) }) : null);
       }
     }
 
-    // Move and then let enemies move
     setGameState(prev => {
       if (!prev) return null;
       const nextState = {
