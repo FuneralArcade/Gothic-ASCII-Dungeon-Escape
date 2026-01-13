@@ -15,14 +15,14 @@ export class AudioManager {
 
     // Cavern Echo Setup (Feedback Delay Line)
     this.reverbBus = this.ctx.createDelay(2.0);
-    this.reverbBus.delayTime.value = 0.45; // Delay time for cavern reflections
+    this.reverbBus.delayTime.value = 0.42; // Precisely tuned for cavernous reflections
     
     const feedback = this.ctx.createGain();
-    feedback.gain.value = 0.5; // Echo persistence
+    feedback.gain.value = 0.48; // Echo persistence
     
     const echoFilter = this.ctx.createBiquadFilter();
     echoFilter.type = 'lowpass';
-    echoFilter.frequency.value = 700; // Muffled reflections of stone
+    echoFilter.frequency.value = 900; // Slightly brighter for "wet" reflections
 
     this.reverbBus.connect(echoFilter);
     echoFilter.connect(feedback);
@@ -38,85 +38,101 @@ export class AudioManager {
   }
 
   /**
-   * Footstep: A stony thud + grit + cavern reflection
+   * Footstep: Leather shoe in a damp cave.
+   * Layers: Firm heel strike + Wet squelch + Leather creak + Echo
    */
   static playFootstep() {
     if (!this.ctx || !this.masterBus || !this.reverbBus) return;
     const now = this.ctx.currentTime;
 
-    // 1. Low Thud (The impact)
-    const thud = this.ctx.createOscillator();
-    const thudGain = this.ctx.createGain();
-    thud.type = 'sine';
-    thud.frequency.setValueAtTime(70, now);
-    thud.frequency.exponentialRampToValueAtTime(30, now + 0.1);
-    thudGain.gain.setValueAtTime(0.3, now);
-    thudGain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-    thud.connect(thudGain);
-    thudGain.connect(this.masterBus);
-    thudGain.connect(this.reverbBus); // Send to cavern echo
-    thud.start(now);
-    thud.stop(now + 0.1);
+    // 1. Leather Heel Strike (The Thud)
+    const heel = this.ctx.createOscillator();
+    const heelGain = this.ctx.createGain();
+    heel.type = 'sine';
+    heel.frequency.setValueAtTime(65, now);
+    heel.frequency.exponentialRampToValueAtTime(35, now + 0.08);
+    heelGain.gain.setValueAtTime(0.35, now);
+    heelGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    heel.connect(heelGain);
+    heelGain.connect(this.masterBus);
+    heelGain.connect(this.reverbBus); // Send to echo
+    heel.start(now);
+    heel.stop(now + 0.1);
 
-    // 2. The Grit (Friction on stone)
-    const noise = this.ctx.createBufferSource();
-    const bufferSize = this.ctx.sampleRate * 0.05;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
-    noise.buffer = buffer;
+    // 2. The Damp Squelch (Wetness/Slap)
+    const squelchBuffer = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.04, this.ctx.sampleRate);
+    const squelchData = squelchBuffer.getChannelData(0);
+    for (let i = 0; i < squelchData.length; i++) squelchData[i] = Math.random() * 2 - 1;
+    const squelchSource = this.ctx.createBufferSource();
+    squelchSource.buffer = squelchBuffer;
 
-    const noiseFilter = this.ctx.createBiquadFilter();
-    noiseFilter.type = 'bandpass';
-    noiseFilter.frequency.value = 1200;
-    const noiseGain = this.ctx.createGain();
-    noiseGain.gain.setValueAtTime(0.08, now);
-    noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+    const squelchFilter = this.ctx.createBiquadFilter();
+    squelchFilter.type = 'bandpass';
+    squelchFilter.frequency.value = 3200;
+    squelchFilter.Q.value = 2;
 
-    noise.connect(noiseFilter);
-    noiseFilter.connect(noiseGain);
-    noiseGain.connect(this.masterBus);
-    noise.start(now);
+    const squelchGain = this.ctx.createGain();
+    squelchGain.gain.setValueAtTime(0.07, now);
+    squelchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.035);
+
+    squelchSource.connect(squelchFilter);
+    squelchFilter.connect(squelchGain);
+    squelchGain.connect(this.masterBus);
+    squelchSource.start(now);
+
+    // 3. Leather Creak (Friction)
+    const creak = this.ctx.createOscillator();
+    const creakGain = this.ctx.createGain();
+    creak.type = 'triangle';
+    creak.frequency.setValueAtTime(800, now + 0.01);
+    creak.frequency.exponentialRampToValueAtTime(1200, now + 0.03);
+    creakGain.gain.setValueAtTime(0.03, now + 0.01);
+    creakGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    creak.connect(creakGain);
+    creakGain.connect(this.masterBus);
+    creak.start(now + 0.01);
+    creak.stop(now + 0.05);
   }
 
   /**
-   * Realistic Key Sound: Multiple randomized metallic clinks
+   * Realistic Key Sound: A sharp, rapid cluster of metallic clinks
    */
   static playPickupKey() {
     if (!this.ctx || !this.masterBus) return;
     const now = this.ctx.currentTime;
 
-    // Trigger 6 distinct "clinks" to simulate a bundle of keys rattling
-    for (let i = 0; i < 6; i++) {
-      const startTime = now + (i * 0.02) + (Math.random() * 0.03);
-      const freq = 2000 + Math.random() * 3500;
+    const numClinks = 9;
+    for (let i = 0; i < numClinks; i++) {
+      const startTime = now + (i * 0.012) + (Math.random() * 0.01);
+      const freq = 2500 + Math.random() * 4000;
       
-      // The high-pitched ring
       const ring = this.ctx.createOscillator();
       const ringGain = this.ctx.createGain();
       ring.type = 'sine';
       ring.frequency.setValueAtTime(freq, startTime);
-      ringGain.gain.setValueAtTime(0.1, startTime);
-      ringGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.1);
+      ring.frequency.exponentialRampToValueAtTime(freq * 1.5, startTime + 0.05);
+      
+      ringGain.gain.setValueAtTime(0.12, startTime);
+      ringGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.04 + Math.random() * 0.04);
       
       ring.connect(ringGain);
       ringGain.connect(this.masterBus);
       ring.start(startTime);
-      ring.stop(startTime + 0.12);
+      ring.stop(startTime + 0.1);
 
-      // The metallic transient (click)
       const noise = this.ctx.createBufferSource();
-      const buffer = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.01, this.ctx.sampleRate);
+      const buffer = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.005, this.ctx.sampleRate);
       const data = buffer.getChannelData(0);
       for (let j = 0; j < data.length; j++) data[j] = Math.random() * 2 - 1;
       noise.buffer = buffer;
 
       const noiseFilter = this.ctx.createBiquadFilter();
       noiseFilter.type = 'highpass';
-      noiseFilter.frequency.value = 5000;
+      noiseFilter.frequency.value = 7000;
+      
       const noiseGain = this.ctx.createGain();
-      noiseGain.gain.setValueAtTime(0.05, startTime);
-      noiseGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.01);
+      noiseGain.gain.setValueAtTime(0.06, startTime);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.008);
 
       noise.connect(noiseFilter);
       noiseFilter.connect(noiseGain);
