@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TileType, Position, Entity, LogEntry, GameState, Language } from './types';
-import { MAP_WIDTH, MAP_HEIGHT, INITIAL_HP, INITIAL_VISION, UPGRADED_VISION, TILE_COLORS, TRANSLATIONS } from './constants';
+import { MAP_WIDTH, MAP_HEIGHT, INITIAL_HP, INITIAL_VISION, UPGRADED_VISION, FINAL_FLOOR, TILE_COLORS, TRANSLATIONS } from './constants';
 import { MapGenerator } from './services/MapGenerator';
 import { AudioManager } from './services/AudioManager';
 import Sidebar from './components/Sidebar';
@@ -9,6 +9,7 @@ import Sidebar from './components/Sidebar';
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [gameOver, setGameOver] = useState(false);
+  const [victory, setVictory] = useState(false);
   const [language, setLanguage] = useState<Language>('EN');
   const gameRef = useRef<HTMLDivElement>(null);
 
@@ -34,35 +35,50 @@ const App: React.FC = () => {
     visited[playerPos.y][playerPos.x] = true;
 
     const entities: Entity[] = [];
+    const occupied: Position[] = [playerPos];
 
-    // Spawn Lantern
-    const lanternPos = MapGenerator.getValidSpawn(map);
+    // Spawn Lantern - at least 4 tiles away from player
+    const lanternPos = MapGenerator.getValidSpawnFar(map, [{ pos: playerPos, minDist: 4 }], occupied);
     entities.push({ id: 'lantern', type: TileType.LANTERN, pos: lanternPos });
+    occupied.push(lanternPos);
 
-    // Spawn Key
-    const keyPos = MapGenerator.getValidSpawn(map);
+    // Spawn Key - at least 5 tiles away from player
+    const keyPos = MapGenerator.getValidSpawnFar(map, [{ pos: playerPos, minDist: 5 }], occupied);
     entities.push({ id: 'key', type: TileType.KEY, pos: keyPos });
+    occupied.push(keyPos);
 
-    // Spawn Exit
-    const exitPos = MapGenerator.getValidSpawn(map);
+    // Spawn Exit - at least 6 tiles away from player and 4 tiles away from key
+    const exitPos = MapGenerator.getValidSpawnFar(
+      map, 
+      [
+        { pos: playerPos, minDist: 6 },
+        { pos: keyPos, minDist: 4 }
+      ], 
+      occupied
+    );
     map[exitPos.y][exitPos.x] = TileType.DOOR;
+    occupied.push(exitPos);
 
-    // Spawn Potions
-    const potionCount = 2 + Math.floor(Math.random() * 3);
+    // Spawn Potions - avoid player close surroundings
+    const potionCount = 1 + Math.floor(Math.random() * 2);
     for (let i = 0; i < potionCount; i++) {
-      entities.push({ id: `p-${i}`, type: TileType.POTION, pos: MapGenerator.getValidSpawn(map) });
+      const pos = MapGenerator.getValidSpawnFar(map, [{ pos: playerPos, minDist: 3 }], occupied);
+      entities.push({ id: `p-${i}`, type: TileType.POTION, pos });
+      occupied.push(pos);
     }
 
-    // Spawn Enemies
-    const enemyCount = 3 + floorNum * 2;
+    // Spawn Enemies - AT LEAST 6 tiles away from player to prevent immediate agro, and reduced count
+    const enemyCount = 2 + floorNum;
     for (let i = 0; i < enemyCount; i++) {
+      const pos = MapGenerator.getValidSpawnFar(map, [{ pos: playerPos, minDist: 6 }], occupied);
       entities.push({ 
         id: `e-${i}`, 
         type: TileType.ENEMY, 
-        pos: MapGenerator.getValidSpawn(map),
+        pos,
         hp: 10 + floorNum * 5,
         maxHp: 10 + floorNum * 5
       });
+      occupied.push(pos);
     }
 
     const newState: GameState = {
@@ -86,6 +102,7 @@ const App: React.FC = () => {
 
     setGameState(newState);
     setGameOver(false);
+    setVictory(false);
   }, []);
 
   useEffect(() => {
@@ -126,17 +143,23 @@ const App: React.FC = () => {
     updateVisibility();
   }, [gameState?.player.pos]);
 
-  const processEnemyTurns = (currentState: GameState) => {
+  const processEnemyTurnsOnState = (currentState: GameState, logsList: LogEntry[]): GameState => {
     let currentHp = currentState.player.hp!;
     const playerPos = currentState.player.pos;
     let isDead = false;
+    let hurtSoundPlayed = false;
+
+    const helperAddLog = (msg: string, type: LogEntry['type'] = 'info') => {
+      const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+      logsList.push({ timestamp, message: msg.toUpperCase(), type });
+    };
 
     const updatedEntities = currentState.entities.map(entity => {
       if (entity.type !== TileType.ENEMY) return entity;
 
       const dist = Math.abs(entity.pos.x - playerPos.x) + Math.abs(entity.pos.y - playerPos.y);
       
-      if (dist < 8) {
+      if (dist < 5) {
         let nextX = entity.pos.x;
         let nextY = entity.pos.y;
 
@@ -145,6 +168,10 @@ const App: React.FC = () => {
         else if (entity.pos.y < playerPos.y) nextY++;
         else if (entity.pos.y > playerPos.y) nextY--;
 
+        if (nextX < 0 || nextX >= MAP_WIDTH || nextY < 0 || nextY >= MAP_HEIGHT) {
+          return entity;
+        }
+
         if (currentState.map[nextY][nextX] === TileType.WALL || currentState.map[nextY][nextX] === TileType.ROCK) {
           return entity;
         }
@@ -152,7 +179,13 @@ const App: React.FC = () => {
         if (nextX === playerPos.x && nextY === playerPos.y) {
           const dmg = 5 + Math.floor(Math.random() * 8);
           currentHp -= dmg;
-          addLog(`${language === 'CN' ? '敌人攻击你：-' : 'Enemy strikes: -'}${dmg} HP.`, 'combat');
+          helperAddLog(`${t.log_hurt}${dmg} HP.`, 'combat');
+          
+          if (!hurtSoundPlayed) {
+            AudioManager.playHurt();
+            hurtSoundPlayed = true;
+          }
+          
           if (currentHp <= 0) isDead = true;
           return entity;
         }
@@ -163,27 +196,67 @@ const App: React.FC = () => {
         return { ...entity, pos: { x: nextX, y: nextY } };
       }
 
+      // If outside aggro range, move randomly with 20% probability or idle
+      if (Math.random() < 0.2) {
+        const dirs = [
+          { dx: 1, dy: 0 },
+          { dx: -1, dy: 0 },
+          { dx: 0, dy: 1 },
+          { dx: 0, dy: -1 }
+        ];
+        const randomDir = dirs[Math.floor(Math.random() * dirs.length)];
+        const nextX = entity.pos.x + randomDir.dx;
+        const nextY = entity.pos.y + randomDir.dy;
+
+        if (nextX >= 0 && nextX < MAP_WIDTH && nextY >= 0 && nextY < MAP_HEIGHT) {
+          if (currentState.map[nextY][nextX] === TileType.FLOOR) {
+            const occupied = currentState.entities.some(e => e.id !== entity.id && e.pos.x === nextX && e.pos.y === nextY);
+            const isPlayer = nextX === playerPos.x && nextY === playerPos.y;
+            if (!occupied && !isPlayer) {
+              return { ...entity, pos: { x: nextX, y: nextY } };
+            }
+          }
+        }
+      }
+
       return entity;
     });
 
-    if (isDead) setGameOver(true);
+    if (isDead) {
+      AudioManager.playGameOver();
+      setGameOver(true);
+    }
 
-    setGameState(prev => prev ? ({
-      ...prev,
-      player: { ...prev.player, hp: Math.max(0, currentHp) },
-      entities: updatedEntities
-    }) : null);
+    return {
+      ...currentState,
+      player: { ...currentState.player, hp: Math.max(0, currentHp) },
+      entities: updatedEntities,
+      logs: logsList
+    };
   };
 
   const handleMove = (dx: number, dy: number) => {
-    if (!gameState || gameOver) return;
+    if (!gameState || gameOver || victory) return;
     
     AudioManager.resume();
 
+    const t = TRANSLATIONS[language];
+
+    // 1. Check wait action
     if (dx === 0 && dy === 0) {
-      addLog(t.wait, 'info');
-      AudioManager.playFootstep(); // Echo of silence
-      processEnemyTurns(gameState);
+      const nextState = { ...gameState };
+      const nextLogs = [...gameState.logs];
+      
+      const helperAddLog = (msg: string, type: LogEntry['type'] = 'info') => {
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+        nextLogs.push({ timestamp, message: msg.toUpperCase(), type });
+      };
+
+      helperAddLog(t.wait, 'info');
+      AudioManager.playFootstep();
+
+      const finalState = processEnemyTurnsOnState(nextState, nextLogs);
+      setGameState(finalState);
       return;
     }
 
@@ -195,76 +268,89 @@ const App: React.FC = () => {
     const targetTile = gameState.map[newY][newX];
     if (targetTile === TileType.WALL || targetTile === TileType.ROCK) return;
 
-    // Successful movement: stony footstep with echo
-    AudioManager.playFootstep();
+    const nextState = {
+      ...gameState,
+      player: { ...gameState.player },
+      entities: gameState.entities.map(e => ({ ...e })),
+      logs: [...gameState.logs]
+    };
 
+    const helperAddLog = (msg: string, type: LogEntry['type'] = 'info') => {
+      const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+      nextState.logs.push({ timestamp, message: msg.toUpperCase(), type });
+    };
+
+    // Check stairs/door
     if (targetTile === TileType.DOOR) {
       if (gameState.hasKey) {
-        addLog(`${t.log_descend}${gameState.floor + 1}.`, 'info');
-        initLevel(gameState.floor + 1, gameState.player.hp, gameState.player.maxHp);
-        return;
+        if (gameState.floor === FINAL_FLOOR) {
+          AudioManager.playVictory();
+          setVictory(true);
+          return;
+        } else {
+          AudioManager.playDescend();
+          addLog(`${t.log_descend}${gameState.floor + 1}.`, 'info');
+          initLevel(gameState.floor + 1, gameState.player.hp, gameState.player.maxHp);
+          return;
+        }
       } else {
+        AudioManager.playFootstep(); // Rattling lock sound
         addLog(t.log_locked, 'danger');
         return;
       }
     }
 
-    const entityAtTarget = gameState.entities.find(e => e.pos.x === newX && e.pos.y === newY);
-    
-    if (entityAtTarget) {
-      if (entityAtTarget.type === TileType.ENEMY) {
+    let soundToPlay: 'footstep' | 'pickup_key' | 'pickup_lantern' | 'potion' | 'hit' | null = 'footstep';
+    const entityAtTargetIndex = nextState.entities.findIndex(e => e.pos.x === newX && e.pos.y === newY);
+
+    if (entityAtTargetIndex !== -1) {
+      const ent = nextState.entities[entityAtTargetIndex];
+      
+      if (ent.type === TileType.ENEMY) {
         const damage = 10 + Math.floor(Math.random() * 10);
-        addLog(`${t.log_hit}${damage} HP.`, 'combat');
-        
-        setGameState(prev => {
-          if (!prev) return null;
-          const updatedEntities = prev.entities.map(e => {
-            if (e.id === entityAtTarget.id) {
-              return { ...e, hp: (e.hp || 0) - damage };
-            }
-            return e;
-          }).filter(e => (e.hp !== undefined ? e.hp > 0 : true));
+        helperAddLog(`${t.log_hit}${damage} HP.`, 'combat');
+        soundToPlay = 'hit';
 
-          if (updatedEntities.length < prev.entities.length) {
-            addLog(t.log_kill, 'info');
-          }
+        ent.hp = (ent.hp ?? 0) - damage;
+        if (ent.hp <= 0) {
+          helperAddLog(t.log_kill, 'info');
+          nextState.entities.splice(entityAtTargetIndex, 1);
+        }
+      } else {
+        if (ent.type === TileType.KEY) {
+          helperAddLog(t.log_key, 'item');
+          soundToPlay = 'pickup_key';
+          nextState.hasKey = true;
+        } else if (ent.type === TileType.LANTERN) {
+          helperAddLog(t.log_light, 'item');
+          soundToPlay = 'pickup_lantern';
+          nextState.visionRadius = UPGRADED_VISION;
+        } else if (ent.type === TileType.POTION) {
+          helperAddLog(t.log_potion, 'item');
+          soundToPlay = 'potion';
+          nextState.player.hp = Math.min(nextState.player.maxHp!, (nextState.player.hp ?? 0) + 25);
+        }
 
-          const nextState = { ...prev, entities: updatedEntities };
-          processEnemyTurns(nextState);
-          return nextState;
-        });
-        return;
+        nextState.entities.splice(entityAtTargetIndex, 1);
+        nextState.player.pos = { x: newX, y: newY };
       }
-
-      if (entityAtTarget.type === TileType.KEY) {
-        addLog(t.log_key, 'item');
-        AudioManager.playPickupKey();
-        setGameState(prev => prev ? ({ ...prev, hasKey: true, entities: prev.entities.filter(e => e.id !== entityAtTarget.id) }) : null);
-      } else if (entityAtTarget.type === TileType.LANTERN) {
-        addLog(t.log_light, 'item');
-        AudioManager.playPickupLantern();
-        setGameState(prev => prev ? ({ ...prev, visionRadius: UPGRADED_VISION, entities: prev.entities.filter(e => e.id !== entityAtTarget.id) }) : null);
-      } else if (entityAtTarget.type === TileType.POTION) {
-        addLog(t.log_potion, 'item');
-        AudioManager.playPotion();
-        setGameState(prev => prev ? ({ ...prev, player: { ...prev.player, hp: Math.min(prev.player.maxHp!, prev.player.hp! + 25) }, entities: prev.entities.filter(e => e.id !== entityAtTarget.id) }) : null);
-      }
+    } else {
+      nextState.player.pos = { x: newX, y: newY };
     }
 
-    setGameState(prev => {
-      if (!prev) return null;
-      const nextState = {
-        ...prev,
-        player: { ...prev.player, pos: { x: newX, y: newY } }
-      };
-      processEnemyTurns(nextState);
-      return nextState;
-    });
+    if (soundToPlay === 'footstep') AudioManager.playFootstep();
+    else if (soundToPlay === 'pickup_key') AudioManager.playPickupKey();
+    else if (soundToPlay === 'pickup_lantern') AudioManager.playPickupLantern();
+    else if (soundToPlay === 'potion') AudioManager.playPotion();
+    else if (soundToPlay === 'hit') AudioManager.playHit();
+
+    const finalState = processEnemyTurnsOnState(nextState, nextState.logs);
+    setGameState(finalState);
   };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (gameOver) return;
+      if (gameOver || victory) return;
       switch (e.key.toLowerCase()) {
         case 'w': case 'arrowup': handleMove(0, -1); break;
         case 's': case 'arrowdown': handleMove(0, 1); break;
@@ -278,7 +364,7 @@ const App: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameState, gameOver, language]);
+  }, [gameState, gameOver, victory, language]);
 
   const toggleLanguage = () => {
     setLanguage(prev => prev === 'EN' ? 'CN' : 'EN');
@@ -320,9 +406,22 @@ const App: React.FC = () => {
         {gameOver && (
           <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center z-50 animate-in fade-in duration-1000">
             <h1 className="text-8xl text-red-950 font-bold mb-4 tracking-tighter gothic-title">{t.despair}</h1>
-            <p className="text-gray-700 mb-8 gothic-header text-xl tracking-widest">{t.signal_lost}{gameState.floor}</p>
+            <p className="text-gray-700 mb-8 gothic-header text-xl tracking-widest">{t.signal_lost.replace('{floor}', String(gameState.floor))}</p>
             <button onClick={() => initLevel(1)} className="px-12 py-3 border border-red-950 text-red-900 hover:bg-red-950 hover:text-red-500 transition-all uppercase tracking-[0.5em] gothic-header text-sm">
               {t.reboot}
+            </button>
+          </div>
+        )}
+
+        {victory && (
+          <div className="absolute inset-0 bg-black/95 flex flex-col items-center justify-center z-50 animate-in fade-in duration-1000">
+            <h1 className="text-8xl text-yellow-600 font-bold mb-4 tracking-tighter gothic-title animate-pulse">{t.victory}</h1>
+            <p className="text-gray-300 mb-2 gothic-header text-2xl tracking-widest text-center">{t.victory_desc}</p>
+            <p className="text-gray-600 mb-8 font-mono text-sm tracking-widest text-center">
+              {t.victory_sub}{gameState.floor}
+            </p>
+            <button onClick={() => { initLevel(1); }} className="px-12 py-3 border border-yellow-700 text-yellow-600 hover:bg-yellow-950/40 hover:text-yellow-400 transition-all uppercase tracking-[0.5em] gothic-header text-sm">
+              {t.victory_btn}
             </button>
           </div>
         )}

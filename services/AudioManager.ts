@@ -18,7 +18,7 @@ export class AudioManager {
     this.reverbBus.delayTime.value = 0.42; // Precisely tuned for cavernous reflections
     
     const feedback = this.ctx.createGain();
-    feedback.gain.value = 0.48; // Echo persistence
+    feedback.gain.value = 0.35; // Echo persistence (reduced from 0.48 for tighter cavernous feel)
     
     const echoFilter = this.ctx.createBiquadFilter();
     echoFilter.type = 'lowpass';
@@ -38,60 +38,160 @@ export class AudioManager {
   }
 
   /**
-   * Footstep: Leather shoe in a damp cave.
-   * Layers: Firm heel strike + Wet squelch + Leather creak + Echo
+   * Footstep: Hard-soled leather shoes on wet rainy stone slabs.
+   * Multi-layered physical model:
+   * 1. Heavy stone slab body thuds (deep low-mid impact resonance)
+   * 2. Crisp hard leather heel strike & toe clack transients
+   * 3. Micro wet compression sizzles (the rapid "squish/spit" of thin moisture on hard stone)
+   * 4. Rich spatial reverberation mimicking damp gothic stone hallways
    */
   static playFootstep() {
     if (!this.ctx || !this.masterBus || !this.reverbBus) return;
     const now = this.ctx.currentTime;
 
-    // 1. Leather Heel Strike (The Thud)
-    const heel = this.ctx.createOscillator();
-    const heelGain = this.ctx.createGain();
-    heel.type = 'sine';
-    heel.frequency.setValueAtTime(65, now);
-    heel.frequency.exponentialRampToValueAtTime(35, now + 0.08);
-    heelGain.gain.setValueAtTime(0.35, now);
-    heelGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
-    heel.connect(heelGain);
-    heelGain.connect(this.masterBus);
-    heelGain.connect(this.reverbBus); // Send to echo
-    heel.start(now);
-    heel.stop(now + 0.1);
+    // Reducer for footstep echo: send only 20% of the impact signal to reverb
+    const reverbSend = this.ctx.createGain();
+    reverbSend.gain.setValueAtTime(0.20, now);
+    reverbSend.connect(this.reverbBus);
 
-    // 2. The Damp Squelch (Wetness/Slap)
-    const squelchBuffer = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.04, this.ctx.sampleRate);
-    const squelchData = squelchBuffer.getChannelData(0);
-    for (let i = 0; i < squelchData.length; i++) squelchData[i] = Math.random() * 2 - 1;
-    const squelchSource = this.ctx.createBufferSource();
-    squelchSource.buffer = squelchBuffer;
+    // --- 1. HEEL STRIKE (t = now) ---
+    const heelTime = now;
 
-    const squelchFilter = this.ctx.createBiquadFilter();
-    squelchFilter.type = 'bandpass';
-    squelchFilter.frequency.value = 3200;
-    squelchFilter.Q.value = 2;
+    // A. Deep Solid Stone Slab Thud (Low-mid resonance)
+    const heelStone = this.ctx.createOscillator();
+    const heelStoneGain = this.ctx.createGain();
+    heelStone.type = 'triangle';
+    heelStone.frequency.setValueAtTime(110, heelTime);
+    heelStone.frequency.exponentialRampToValueAtTime(55, heelTime + 0.05);
+    heelStoneGain.gain.setValueAtTime(0.15, heelTime);
+    heelStoneGain.gain.exponentialRampToValueAtTime(0.001, heelTime + 0.06);
+    heelStone.connect(heelStoneGain);
+    heelStoneGain.connect(this.masterBus);
+    heelStoneGain.connect(reverbSend);
+    heelStone.start(heelTime);
+    heelStone.stop(heelTime + 0.06);
 
-    const squelchGain = this.ctx.createGain();
-    squelchGain.gain.setValueAtTime(0.07, now);
-    squelchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.035);
+    // B. Heel Leather Body Tap (Mid resonance)
+    const heelLeather = this.ctx.createOscillator();
+    const heelLeatherGain = this.ctx.createGain();
+    heelLeather.type = 'sine';
+    heelLeather.frequency.setValueAtTime(190, heelTime);
+    heelLeather.frequency.exponentialRampToValueAtTime(95, heelTime + 0.035);
+    heelLeatherGain.gain.setValueAtTime(0.12, heelTime);
+    heelLeatherGain.gain.exponentialRampToValueAtTime(0.001, heelTime + 0.04);
+    heelLeather.connect(heelLeatherGain);
+    heelLeatherGain.connect(this.masterBus);
+    heelLeatherGain.connect(reverbSend);
+    heelLeather.start(heelTime);
+    heelLeather.stop(heelTime + 0.04);
 
-    squelchSource.connect(squelchFilter);
-    squelchFilter.connect(squelchGain);
-    squelchGain.connect(this.masterBus);
-    squelchSource.start(now);
+    // C. Crisp Leather-on-Stone High Clack (Sharp click transient)
+    const heelClackBuffer = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.015, this.ctx.sampleRate);
+    const heelClackData = heelClackBuffer.getChannelData(0);
+    for (let i = 0; i < heelClackData.length; i++) heelClackData[i] = Math.random() * 2 - 1;
+    const heelClackSource = this.ctx.createBufferSource();
+    heelClackSource.buffer = heelClackBuffer;
 
-    // 3. Leather Creak (Friction)
-    const creak = this.ctx.createOscillator();
-    const creakGain = this.ctx.createGain();
-    creak.type = 'triangle';
-    creak.frequency.setValueAtTime(800, now + 0.01);
-    creak.frequency.exponentialRampToValueAtTime(1200, now + 0.03);
-    creakGain.gain.setValueAtTime(0.03, now + 0.01);
-    creakGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
-    creak.connect(creakGain);
-    creakGain.connect(this.masterBus);
-    creak.start(now + 0.01);
-    creak.stop(now + 0.05);
+    const heelClackFilter = this.ctx.createBiquadFilter();
+    heelClackFilter.type = 'bandpass';
+    heelClackFilter.frequency.value = 3400;
+    heelClackFilter.Q.value = 4.0;
+
+    const heelClackGain = this.ctx.createGain();
+    heelClackGain.gain.setValueAtTime(0.15, heelTime);
+    heelClackGain.gain.exponentialRampToValueAtTime(0.001, heelTime + 0.012);
+
+    heelClackSource.connect(heelClackFilter);
+    heelClackFilter.connect(heelClackGain);
+    heelClackGain.connect(this.masterBus);
+    heelClackGain.connect(reverbSend);
+    heelClackSource.start(heelTime);
+
+    // D. Damp Rainy Moisture Squeal/Splat (Ultra-rapid wet compression sizzle)
+    const heelWetBuffer = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.025, this.ctx.sampleRate);
+    const heelWetData = heelWetBuffer.getChannelData(0);
+    for (let i = 0; i < heelWetData.length; i++) {
+      // White noise base with custom damping decay profile
+      heelWetData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.006));
+    }
+    const heelWetSource = this.ctx.createBufferSource();
+    heelWetSource.buffer = heelWetBuffer;
+
+    const heelWetFilter = this.ctx.createBiquadFilter();
+    heelWetFilter.type = 'bandpass';
+    heelWetFilter.frequency.value = 2200; // Wet splat/spray resonance zone
+    heelWetFilter.Q.value = 3.0;
+
+    const heelWetGain = this.ctx.createGain();
+    heelWetGain.gain.setValueAtTime(0.08, heelTime);
+    heelWetGain.gain.exponentialRampToValueAtTime(0.001, heelTime + 0.025);
+
+    heelWetSource.connect(heelWetFilter);
+    heelWetFilter.connect(heelWetGain);
+    heelWetGain.connect(this.masterBus);
+    heelWetSource.start(heelTime);
+
+    // --- 2. TOE ROLL/TAP (t = now + 0.045) ---
+    const toeTime = now + 0.045;
+
+    // A. Toe Leather Body Tap (Higher pitch mid resonance)
+    const toeLeather = this.ctx.createOscillator();
+    const toeLeatherGain = this.ctx.createGain();
+    toeLeather.type = 'sine';
+    toeLeather.frequency.setValueAtTime(250, toeTime);
+    toeLeather.frequency.exponentialRampToValueAtTime(140, toeTime + 0.025);
+    toeLeatherGain.gain.setValueAtTime(0.08, toeTime);
+    toeLeatherGain.gain.exponentialRampToValueAtTime(0.001, toeTime + 0.03);
+    toeLeather.connect(toeLeatherGain);
+    toeLeatherGain.connect(this.masterBus);
+    toeLeatherGain.connect(reverbSend);
+    toeLeather.start(toeTime);
+    toeLeather.stop(toeTime + 0.03);
+
+    // B. Crisp Toe High Tock (Sharp click transient)
+    const toeClackBuffer = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.01, this.ctx.sampleRate);
+    const toeClackData = toeClackBuffer.getChannelData(0);
+    for (let i = 0; i < toeClackData.length; i++) toeClackData[i] = Math.random() * 2 - 1;
+    const toeClackSource = this.ctx.createBufferSource();
+    toeClackSource.buffer = toeClackBuffer;
+
+    const toeClackFilter = this.ctx.createBiquadFilter();
+    toeClackFilter.type = 'bandpass';
+    toeClackFilter.frequency.value = 4000;
+    toeClackFilter.Q.value = 4.5;
+
+    const toeClackGain = this.ctx.createGain();
+    toeClackGain.gain.setValueAtTime(0.10, toeTime);
+    toeClackGain.gain.exponentialRampToValueAtTime(0.001, toeTime + 0.008);
+
+    toeClackSource.connect(toeClackFilter);
+    toeClackFilter.connect(toeClackGain);
+    toeClackGain.connect(this.masterBus);
+    toeClackGain.connect(reverbSend);
+    toeClackSource.start(toeTime);
+
+    // C. Damp Rainy Moisture Toe Squeeze (Ultra-rapid wet sizzle)
+    const toeWetBuffer = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.015, this.ctx.sampleRate);
+    const toeWetData = toeWetBuffer.getChannelData(0);
+    for (let i = 0; i < toeWetData.length; i++) {
+      toeWetData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.004));
+    }
+    const toeWetSource = this.ctx.createBufferSource();
+    toeWetSource.buffer = toeWetBuffer;
+
+    const toeWetFilter = this.ctx.createBiquadFilter();
+    toeWetFilter.type = 'bandpass';
+    toeWetFilter.frequency.value = 2500;
+    toeWetFilter.Q.value = 4.0;
+
+    const toeWetGain = this.ctx.createGain();
+    toeWetGain.gain.setValueAtTime(0.05, toeTime);
+    toeWetGain.gain.exponentialRampToValueAtTime(0.001, toeTime + 0.015);
+
+    toeWetSource.connect(toeWetFilter);
+    toeWetFilter.connect(toeWetGain);
+    toeWetGain.connect(this.masterBus);
+    toeWetSource.start(toeTime);
   }
 
   /**
@@ -205,5 +305,139 @@ export class AudioManager {
 
     noise.start(now);
     noise.stop(now + duration);
+  }
+
+  static playHit() {
+    if (!this.ctx || !this.masterBus) return;
+    const now = this.ctx.currentTime;
+    
+    // Low blunt thud
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(150, now);
+    osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+    
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 600;
+
+    gain.gain.setValueAtTime(0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterBus);
+    
+    osc.start(now);
+    osc.stop(now + 0.15);
+  }
+
+  static playHurt() {
+    if (!this.ctx || !this.masterBus) return;
+    const now = this.ctx.currentTime;
+    
+    const osc1 = this.ctx.createOscillator();
+    const osc2 = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc1.type = 'triangle';
+    osc1.frequency.setValueAtTime(90, now);
+    osc1.frequency.linearRampToValueAtTime(50, now + 0.25);
+
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(95, now);
+    osc2.frequency.linearRampToValueAtTime(45, now + 0.25);
+
+    gain.gain.setValueAtTime(0.4, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(this.masterBus);
+
+    osc1.start(now);
+    osc2.start(now);
+    osc1.stop(now + 0.25);
+    osc2.stop(now + 0.25);
+  }
+
+  static playDescend() {
+    if (!this.ctx || !this.masterBus || !this.reverbBus) return;
+    const now = this.ctx.currentTime;
+    
+    const notes = [220, 185, 147, 110]; // minor descending chords
+    notes.forEach((freq, idx) => {
+      const startTime = now + idx * 0.15;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq, startTime);
+      
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(400, startTime);
+      
+      gain.gain.setValueAtTime(0.12, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.4);
+      
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterBus!);
+      gain.connect(this.reverbBus!);
+      
+      osc.start(startTime);
+      osc.stop(startTime + 0.4);
+    });
+  }
+
+  static playGameOver() {
+    if (!this.ctx || !this.masterBus) return;
+    const now = this.ctx.currentTime;
+    
+    const pitches = [110, 104, 73]; // heavy dramatic doom chords
+    pitches.forEach((freq, idx) => {
+      const startTime = now + idx * 0.25;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, startTime);
+      
+      gain.gain.setValueAtTime(0.25, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 1.2);
+      
+      osc.connect(gain);
+      gain.connect(this.masterBus!);
+      
+      osc.start(startTime);
+      osc.stop(startTime + 1.2);
+    });
+  }
+
+  static playVictory() {
+    if (!this.ctx || !this.masterBus || !this.reverbBus) return;
+    const now = this.ctx.currentTime;
+    
+    const chord = [220, 277, 330, 440, 554, 660];
+    chord.forEach((freq, idx) => {
+      const startTime = now + idx * 0.12;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, startTime);
+      
+      gain.gain.setValueAtTime(0.15, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + 1.0);
+      
+      osc.connect(gain);
+      gain.connect(this.masterBus!);
+      gain.connect(this.reverbBus!);
+      
+      osc.start(startTime);
+      osc.stop(startTime + 1.0);
+    });
   }
 }

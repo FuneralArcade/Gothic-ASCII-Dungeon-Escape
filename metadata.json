@@ -1,5 +1,8 @@
 {
   "name": "Gothic ASCII Cavern Escape",
   "description": "A minimalist Gothic Roguelike game featuring irregular cave generation, ASCII graphics, and a fog-of-war exploration mechanic.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

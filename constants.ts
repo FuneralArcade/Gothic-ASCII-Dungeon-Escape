@@ -4,6 +4,7 @@ export const MAP_HEIGHT = 40;
 export const INITIAL_HP = 100;
 export const INITIAL_VISION = 2;
 export const UPGRADED_VISION = 5;
+export const FINAL_FLOOR = 5;
 
 export const TILE_COLORS: Record<string, string> = {
   '@': 'text-white font-bold',
@@ -28,12 +29,12 @@ export const GOTHIC_BORDERS = {
 
 export const TRANSLATIONS = {
   EN: {
-    status: 'STATUS',
+    status: 'CONDITION',
     controls: 'CONTROLS',
     log: 'LOG',
-    floor: 'STRATA:',
+    floor: 'DEPTH:',
     sight: 'SIGHT:',
-    key: 'KEY:',
+    key: 'RELIQUARY KEY:',
     vitality: 'VITALITY',
     found: 'FOUND',
     missing: 'MISSING',
@@ -42,19 +43,23 @@ export const TRANSLATIONS = {
     move_s: 'MOVE SOUTH',
     move_e: 'MOVE EAST',
     wait: 'WAIT',
-    despair: 'FAILURE',
-    signal_lost: 'SIGNAL LOST ON STRATA ',
-    reboot: 'REBOOT',
+    despair: 'YOU PERISHED',
+    signal_lost: 'SIGNAL LOST ON STRATA {floor}',
+    reboot: 'TRY AGAIN',
     log_descend: 'Descending to strata ',
     log_locked: 'The door is locked. (Key required)',
     log_hit: 'Hit enemy: -',
     log_kill: 'Enemy defeated.',
     log_death: 'You died.',
-    log_hurt: 'Damage taken: -',
+    log_hurt: 'The abyss wounds you: -',
     log_key: 'Found the key.',
     log_light: 'Found a lantern. Vision increased.',
     log_potion: 'Found a potion. HP restored.',
-    booting: 'BOOTING...'
+    booting: 'BOOTING...',
+    victory: 'ASCENSION',
+    victory_desc: 'YOU HAVE ESCAPED THE DARK ABYSS',
+    victory_sub: 'REACHED THE SUNLIT SURFACE FROM DEPTH ',
+    victory_btn: 'BEGIN NEW DESCENT'
   },
   CN: {
     status: '状态',
@@ -71,9 +76,9 @@ export const TRANSLATIONS = {
     move_s: '向下移动',
     move_e: '向右移动',
     wait: '原地待命',
-    despair: '任务失败',
-    signal_lost: '在第 _ 层失去信号',
-    reboot: '重启系统',
+    despair: '死亡',
+    signal_lost: '在第 {floor} 层被深渊吞噬',
+    reboot: '重新进入',
     log_descend: '正在进入层级 ',
     log_locked: '门已锁住（需要钥匙）。',
     log_hit: '攻击敌人：-',
@@ -83,6 +88,10 @@ export const TRANSLATIONS = {
     log_key: '找到了钥匙。',
     log_light: '找到了提灯。视野扩大。',
     log_potion: '找到了药水。生命值恢复。',
-    booting: '系统启动中...'
+    booting: '系统启动中...',
+    victory: '重见天日',
+    victory_desc: '成功逃离地牢',
+    victory_sub: '成功逃生，最终抵达层级：',
+    victory_btn: '重新探索'
   }
 };
