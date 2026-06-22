@@ -1,0 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=UnifrakturMaguntia&family=MedievalSharp&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Courier Prime", "Courier New", "SimSun", "STSong", monospace;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: #000;
+    color: #ccc;
+    font-family: 'Courier Prime', 'Courier New', 'SimSun', 'STSong', monospace;
+    overflow: hidden;
+}
+
+.gothic-header {
+    font-family: 'MedievalSharp', cursive;
+}
+
+.gothic-title {
+    font-family: 'UnifrakturMaguntia', cursive;
+}
+
+/* Prevent text selection during gameplay */
+* {
+    user-select: none;
+}
+
+::-webkit-scrollbar {
+    width: 4px;
+}
+::-webkit-scrollbar-track {
+    background: #000;
+}
+::-webkit-scrollbar-thumb {
+    background: #333;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}

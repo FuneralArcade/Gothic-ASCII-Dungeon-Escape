@@ -19,12 +19,12 @@ export const TILE_COLORS: Record<string, string> = {
 };
 
 export const GOTHIC_BORDERS = {
-  topLeft: '╔',
-  topRight: '╗',
-  bottomLeft: '╚',
-  bottomRight: '╝',
-  horizontal: '═',
-  vertical: '║'
+  topLeft: '\u2554',
+  topRight: '\u2557',
+  bottomLeft: '\u255a',
+  bottomRight: '\u255d',
+  horizontal: '\u2550',
+  vertical: '\u2551'
 };
 
 export const TRANSLATIONS = {

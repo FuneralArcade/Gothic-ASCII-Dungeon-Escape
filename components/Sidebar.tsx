@@ -20,7 +20,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const hpPercent = Math.max(0, (player.hp || 0) / (player.maxHp || 1) * 100);
   const barWidth = 20;
   const filledWidth = Math.round((hpPercent / 100) * barWidth);
-  const hpBar = `[${'█'.repeat(filledWidth)}${'.'.repeat(barWidth - filledWidth)}]`;
+  const hpBar = `[${'\u2588'.repeat(filledWidth)}${'.'.repeat(barWidth - filledWidth)}]`;
 
   // Centering logic using flex borders for pixel-perfect alignment
   const renderSectionHeader = (title: string) => {
@@ -90,10 +90,10 @@ const Sidebar: React.FC<SidebarProps> = ({
       <div className="mb-6">
         {renderSectionHeader(t.controls)}
         <div className="px-2 text-[11px] text-gray-500 space-y-1.5 leading-tight">
-          <p className="flex justify-between"><span>{t.move_n}</span> <span className="text-gray-400">[W / ↑]</span></p>
-          <p className="flex justify-between"><span>{t.move_w}</span> <span className="text-gray-400">[A / ←]</span></p>
-          <p className="flex justify-between"><span>{t.move_s}</span> <span className="text-gray-400">[S / ↓]</span></p>
-          <p className="flex justify-between"><span>{t.move_e}</span> <span className="text-gray-400">[D / →]</span></p>
+          <p className="flex justify-between"><span>{t.move_n}</span> <span className="text-gray-400">[W / {'\u2191'}]</span></p>
+          <p className="flex justify-between"><span>{t.move_w}</span> <span className="text-gray-400">[A / {'\u2190'}]</span></p>
+          <p className="flex justify-between"><span>{t.move_s}</span> <span className="text-gray-400">[S / {'\u2193'}]</span></p>
+          <p className="flex justify-between"><span>{t.move_e}</span> <span className="text-gray-400">[D / {'\u2192'}]</span></p>
           <p className="flex justify-between"><span>{t.wait}</span> <span className="text-gray-400">[SPACE]</span></p>
         </div>
       </div>
@@ -104,7 +104,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex-1 overflow-y-auto space-y-1.5 px-1 text-[11px] scrollbar-hide">
           {logs.slice().reverse().map((log, i) => (
             <div key={i} className="flex gap-2 animate-in fade-in slide-in-from-right-1 duration-200">
-              <span className="text-gray-800 shrink-0 select-none font-bold">»</span>
+              <span className="text-gray-800 shrink-0 select-none font-bold">{'\u00bb'}</span>
               <span className={
                 log.type === 'combat' ? 'text-red-900/90' :
                 log.type === 'item' ? 'text-yellow-800/90' :
