@@ -124,7 +124,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           onClick={onToggleLanguage}
           className="mb-4 text-[10px] text-gray-600 hover:text-white transition-colors border border-gray-800 px-3 py-1 bg-black hover:bg-gray-950 tracking-widest uppercase"
         >
-          {language === 'EN' ? '[ EN | 中 ]' : '[ 中 | EN ]'}
+          {language === 'EN' ? '[ EN | \u4e2d ]' : '[ \u4e2d | EN ]'}
         </button>
         <div className="text-[10px] text-gray-800 tracking-[0.3em] mb-1 gothic-header opacity-50">
           KERNEL.SYSTEM.CAVERN
